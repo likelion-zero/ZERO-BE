@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
-from .models import Song, Word
+from .models import Song, Word, Playlist
 
 User = get_user_model()
 
@@ -16,7 +16,7 @@ class SongCreateSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         if len(attrs["words"]) != len(attrs["meaning"]):
-            raise serializers.ValidationError("words와 meaning 길이가 다름")
+            raise serializers.ValidationError("words와 meaning 길이가 다릅니다.")
         return attrs
 
     def create(self, validated_data):
@@ -26,19 +26,18 @@ class SongCreateSerializer(serializers.Serializer):
 
         user = User.objects.get(username=username)
 
-        # 1) Song 저장
-        song = Song.objects.create(
-            user=user,
-            **validated_data
-        )
+        # Song 생성 (User 없음)
+        song = Song.objects.create(**validated_data)
 
-        # 2) Word 여러 개 저장
+        # Word 저장
         for w, m in zip(words, meanings):
-            Word.objects.create(
-                song=song,
-                user=user,
-                word=w,
-                meaning=m,
-            )
+            Word.objects.create(song=song, word=w, meaning=m)
+
+        # Playlist 연결
+        Playlist.objects.create(
+            song=song,
+            user=user,
+            is_creator=True
+        )
 
         return song
