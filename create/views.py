@@ -2,6 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .serializers import SongCreateSerializer
+from create.api import get_word_meanings
 
 
 class CreateSongView(APIView):
@@ -21,4 +22,15 @@ class CreateSongView(APIView):
                 "next_action": "CALL_SUNO"
             },
             status=status.HTTP_201_CREATED
+        )
+        
+class MeaningView(APIView):
+    def get(self, request, word):
+        meanings = get_word_meanings(word)
+
+        return Response(
+            {
+                "word": word,
+                "meanings": meanings,
+            }
         )
