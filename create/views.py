@@ -16,7 +16,7 @@ from .utils import translate_word_with_google, SunoClient
 class SongCreateView(APIView):
     """
     POST /api/create
-    곡 기본 정보 + 단어 리스트를 받아서 Song, Word, History 생성
+    곡 기본 정보 + 단어 리스트를 받아 Song, Word, History 생성
     """
 
     permission_classes = [permissions.AllowAny]
@@ -31,13 +31,12 @@ class SongCreateView(APIView):
 class WordMeaningView(APIView):
     """
     GET /api/create/meaning/{word}
-    구글 번역 API를 통해 뜻 리스트 반환 (지금은 더미)
+    구글 번역 API(더미)로 단어 뜻 후보 반환
     """
 
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, word):
-        # 실제 구현에선 source/target을 query param으로 받을 수도 있음
         source_lang = request.query_params.get("source", "auto")
         target_lang = request.query_params.get("target", "ko")
 
@@ -57,7 +56,7 @@ class WordMeaningView(APIView):
 class SongGenerateView(APIView):
     """
     POST /api/create/{song_id}
-    Suno AI 호출해서 SongDetail 생성 (지금은 더미)
+    Suno AI(더미) 호출 → SongDetail 생성/업데이트 후 상세 정보 반환
     """
 
     permission_classes = [permissions.AllowAny]
@@ -69,7 +68,7 @@ class SongGenerateView(APIView):
         req_serializer.is_valid(raise_exception=True)
         data = req_serializer.validated_data
 
-        client = SunoClient(api_key=None)  # 실제 구현 시 설정에서 가져오기
+        client = SunoClient(api_key=None)
         result = client.generate_song(
             song,
             duration_sec=data.get("duration_sec", 60),
@@ -77,14 +76,14 @@ class SongGenerateView(APIView):
             extra_prompt=data.get("extra_prompt"),
         )
 
-        # SongDetail 생성 또는 업데이트
         detail, _ = SongDetail.objects.update_or_create(
             song=song,
             defaults={
+                "create_user": song.create_user,
+                "song_url": result["song_url"],
                 "runtime": result["runtime"],
-                "audio_url": result["audio_url"],
                 "lyrics": result["lyrics"],
-                "keywords": result.get("keywords", ""),
+                "keywords": result.get("keywords", []),
             },
         )
 

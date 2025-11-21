@@ -6,7 +6,6 @@ User = get_user_model()
 
 
 class SongCreateSerializer(serializers.Serializer):
-    # create 화면에서 받는 값
     title = serializers.CharField(max_length=200)
     language = serializers.CharField(max_length=20)
     genre = serializers.CharField(max_length=50)
@@ -15,28 +14,35 @@ class SongCreateSerializer(serializers.Serializer):
         child=serializers.CharField(max_length=100),
         allow_empty=False,
     )
+    created_by = serializers.CharField(max_length=150, write_only=True)
 
     def create(self, validated_data):
-        request = self.context["request"]
-        user = request.user if request.user.is_authenticated else None
+        # created_by(username) → User 찾기
+        username = validated_data.pop("created_by")
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            raise serializers.ValidationError(
+                {"created_by": "해당 username을 가진 유저가 없습니다."}
+            )
 
         words = validated_data.pop("words")
+
+        # Song 생성
         song = Song.objects.create(create_user=user, **validated_data)
 
-        # word 저장
-        word_objs = [
-            Word(song=song, create_user=user, word=w)
-            for w in words
-        ]
-        Word.objects.bulk_create(word_objs)
+        # Word 생성
+        Word.objects.bulk_create(
+            [Word(song=song, create_user=user, word=w) for w in words]
+        )
 
-        # history 0으로 생성
+        # History 초기화
         History.objects.create(song=song, count=0)
 
         return song
 
     def to_representation(self, instance: Song):
-        # 응답 구조
+        # 응답 JSON
         return {
             "song_id": instance.pk,
             "title": instance.title,
@@ -58,16 +64,20 @@ class MeaningResponseSerializer(serializers.Serializer):
 class SongGenerateRequestSerializer(serializers.Serializer):
     duration_sec = serializers.IntegerField(required=False, default=60)
     model = serializers.CharField(required=False, default="suno_v3_5")
-    extra_prompt = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    extra_prompt = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
 
 
 class SongDetailSerializer(serializers.ModelSerializer):
+    # SongDetail + Song + Word + History 합쳐서 응답용
     song_id = serializers.IntegerField(source="song.pk")
     title = serializers.CharField(source="song.title")
     language = serializers.CharField(source="song.language")
     genre = serializers.CharField(source="song.genre")
     mood = serializers.CharField(source="song.mood")
-    created_by = serializers.CharField(source="song.create_user.username", allow_null=True)
+    created_by = serializers.CharField(source="song.create_user.username")
+
     history_count = serializers.SerializerMethodField()
     words = serializers.SerializerMethodField()
     image_words = serializers.SerializerMethodField()
@@ -82,7 +92,7 @@ class SongDetailSerializer(serializers.ModelSerializer):
             "mood",
             "created_by",
             "runtime",
-            "audio_url",
+            "song_url",
             "lyrics",
             "keywords",
             "words",
@@ -98,6 +108,5 @@ class SongDetailSerializer(serializers.ModelSerializer):
         return list(obj.song.words.values_list("word", flat=True))
 
     def get_image_words(self, obj):
-        # 상위 9개만
         qs = obj.song.words.all().order_by("id")[:9]
         return [w.word for w in qs]

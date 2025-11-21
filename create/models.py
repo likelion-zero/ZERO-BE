@@ -5,35 +5,47 @@ User = get_user_model()
 
 
 class Song(models.Model):
-    # AutoField 기본 pk = id 사용해도 되고, 명시하고 싶으면 primary_key=True
+    # Song : Song_ID, create_user, title, language, genre, mood
     create_user = models.ForeignKey(User, on_delete=models.CASCADE)
     title = models.CharField(max_length=200)
     language = models.CharField(max_length=20)
     genre = models.CharField(max_length=50)
     mood = models.CharField(max_length=50)
-    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.title} ({self.create_user})"
 
 
+class Playlist(models.Model):
+    # Playlist : Song_ID, username, song_title
+    song = models.ForeignKey(Song, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    song_title = models.CharField(max_length=200)
+
+    class Meta:
+        unique_together = ("song", "user")
+
+    def __str__(self):
+        return f"{self.user} - {self.song_title}"
+
+
 class SongDetail(models.Model):
-    song = models.OneToOneField(
-        Song, on_delete=models.CASCADE, related_name="detail"
-    )
-    runtime = models.IntegerField()          # 초 단위
-    audio_url = models.URLField()
+    # Song_Detail : Song_ID, create_user, song_url, runtime, lylics, keywords
+    song = models.OneToOneField(Song, on_delete=models.CASCADE)
+    create_user = models.ForeignKey(User, on_delete=models.CASCADE)
+    song_url = models.URLField()
+    runtime = models.IntegerField()
     lyrics = models.TextField()
-    keywords = models.TextField(blank=True)  # 필요하면 JSONField로 교체
+    # JSON 형태로 저장
+    keywords = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return f"Detail of {self.song_id}"
 
 
 class Word(models.Model):
-    song = models.ForeignKey(
-        Song, on_delete=models.CASCADE, related_name="words"
-    )
+    # Word : Song_ID, create_user, word
+    song = models.ForeignKey(Song, on_delete=models.CASCADE, related_name="words")
     create_user = models.ForeignKey(User, on_delete=models.CASCADE)
     word = models.CharField(max_length=100)
 
@@ -42,31 +54,9 @@ class Word(models.Model):
 
 
 class History(models.Model):
-    song = models.OneToOneField(
-        Song, on_delete=models.CASCADE, related_name="history"
-    )
+    # History : Song_ID, Count
+    song = models.OneToOneField(Song, on_delete=models.CASCADE, related_name="history")
     count = models.IntegerField(default=0)
 
     def __str__(self):
         return f"History {self.song_id}: {self.count}"
-
-
-class Playlist(models.Model):
-    # create 앱에서 관리, playlist 앱은 이걸 import 해서 사용
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="playlist"
-    )
-    song = models.ForeignKey(
-        Song, on_delete=models.CASCADE, related_name="in_playlists"
-    )
-    song_title = models.CharField(max_length=200)
-    is_from_chart = models.BooleanField(default=False)
-    last_played_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["-last_played_at"]
-        unique_together = ("user", "song")
-
-    def __str__(self):
-        return f"{self.user} - {self.song_title}"
-
