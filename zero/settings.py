@@ -26,6 +26,8 @@ SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
 
 GEMINI_KEY = env("GEMINI_KEY")
+SUNO_API_KEY = env("SUNO_API_KEY", default=None)
+# SUNO_CALLBACK_URL = "https://내도메인/api/suno/callback/"
 
 ALLOWED_HOSTS = ['*']
 
@@ -39,6 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
 
     'corsheaders',
     

@@ -31,7 +31,9 @@ class Playlist(models.Model):
         to_field="username",
         db_column="username",
         on_delete=models.CASCADE,
-        related_name="playlist_items"
+        related_name="playlist_items",
+        null=True,  # 추가
+        blank=True,  # 추가
     )
     is_creator = models.BooleanField(default=False)
 
