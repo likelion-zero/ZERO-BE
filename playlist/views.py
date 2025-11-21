@@ -1,76 +1,116 @@
-from django.shortcuts import render, get_object_or_404
 from django.contrib.auth import get_user_model
+from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status, permissions
 
-from create.models import Song, Playlist, History
-from .serializers import PlaylistSongSerializer, SongPlaySerializer
+from create.models import Song, SongDetail, Word, History, Playlist
 
 User = get_user_model()
 
-
-class PlaylistListView(APIView):
-    permission_classes = [permissions.AllowAny]  # 인증 붙일 거면 수정
-
-    def get(self, request, user_id):
-        user = get_object_or_404(User, username=user_id)
-        qs = Playlist.objects.filter(user=user).select_related(
-            'song',
-            'song__detail',
-            'song__history',
-            'song__create_user',
-        )
-        serializer = PlaylistSongSerializer(qs, many=True)
-        return Response({"user_id": user.username, "songs": serializer.data})
-
-
-class PlaylistDeleteView(APIView):
-    permission_classes = [permissions.AllowAny]
-
-    def delete(self, request, user_id, song_id):
-        user = get_object_or_404(User, username=user_id)
-        playlist_item = get_object_or_404(
-            Playlist,
-            user=user,
-            song__pk=song_id,
-        )
-        playlist_item.delete()
-        return Response(
-            {
-                "user_id": user.username,
-                "song_id": song_id,
-                "status": "deleted_from_playlist_only",
-            },
-            status=status.HTTP_200_OK,
-        )
-
-
-class SongPlayView(APIView):
-    """
-    GET  : 곡 정보 조회 (history 그대로)
-    POST : 실제 재생 시점에 history_count +1
-    """
-
-    permission_classes = [permissions.AllowAny]
-
-    def get_object(self, song_id):
-        return get_object_or_404(Song.objects.select_related(
-            'detail', 'history', 'create_user'
-        ), pk=song_id)
-
+class PlaySongView(APIView):
     def get(self, request, song_id):
-        song = self.get_object(song_id)
-        serializer = SongPlaySerializer(song)
-        return Response(serializer.data)
+        song = get_object_or_404(Song, id=song_id)
 
-    def post(self, request, song_id):
-        song = self.get_object(song_id)
+        detail = (
+            SongDetail.objects
+            .filter(song=song)
+            .order_by("-id")
+            .first()
+        )
 
-        history, _ = History.objects.get_or_create(song=song)
+        image_words = list(
+            Word.objects
+            .filter(song=song)
+            .values_list("word", flat=True)[:9]
+        )
+
+        history, _ = History.objects.get_or_create(
+            song=song,
+            defaults={"count": 0},
+        )
         history.count += 1
         history.save()
 
-        serializer = SongPlaySerializer(song)
-        # updated_history_count만 필요하면 serializer 대신 값만 보내도 됨
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        data = {
+            "song_id": song.id,
+            "title": song.title,
+            "genre": song.genre,
+            "mood": song.mood,
+            "runtime": detail.runtime if detail else None,
+            "audio_url": detail.song_url if detail else None,
+            "lyrics": detail.lyrics if detail else "",
+            "image_words": image_words,
+            "history_count": history.count,
+        }
+
+        return Response(data)
+
+
+class UserPlaylistView(APIView):
+    def get(self, request, user_id):
+        user = get_object_or_404(User, username=user_id)
+
+        playlist_items = (
+            Playlist.objects
+            .filter(user=user)
+            .select_related("song")
+        )
+
+        songs_data = []
+
+        for item in playlist_items:
+            song = item.song
+            
+            detail = (
+                SongDetail.objects
+                .filter(song=song)
+                .order_by("-id")
+                .first()
+            )
+
+            image_words = list(
+                Word.objects
+                .filter(song=song)
+                .values_list("word", flat=True)[:9]
+            )
+
+            history, _ = History.objects.get_or_create(
+                song=song,
+                defaults={"count": 0},
+            )
+
+            songs_data.append({
+                "song_id": song.id,
+                "title": song.title,
+                "language": song.language,
+                "genre": song.genre,
+                "mood": song.mood,
+                "runtime": detail.runtime if detail else None,
+                "history_count": history.count,
+                "image_words": image_words,
+            })
+
+        return Response({
+            "user_id": user.username,
+            "songs": songs_data,
+        })
+
+
+class DeleteFromPlaylistView(APIView):
+    def delete(self, request, user_id, song_id):
+        user = get_object_or_404(User, username=user_id)
+
+        playlist_item = get_object_or_404(
+            Playlist,
+            user=user,
+            song_id=song_id
+        )
+
+        playlist_item.delete()
+
+        return Response({
+            "user_id": user.username,
+            "song_id": song_id,
+            "status": "deleted_from_playlist_only"
+        })
+

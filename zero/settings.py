@@ -11,28 +11,21 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 from logging import DEBUG
 from pathlib import Path
-
+from dotenv import load_dotenv
 import os
 import environ
 
+load_dotenv()
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 env = environ.Env(DEBUG=(bool, True))
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
-
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env('SECRET_KEY')
-
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG')
+
+GEMINI_KEY = env("GEMINI_KEY")
 
 ALLOWED_HOSTS = ['*']
 
@@ -46,11 +39,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
-    'chart'
+
     'corsheaders',
     
-    'playlist'
+    'create',
+    'playlist',
+    'chart'
 ]
 
 MIDDLEWARE = [
@@ -146,6 +140,12 @@ CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
 
+    'http://localhost:5173'
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'create.auth.AlwaysSuperUser',
+    ]
+}

@@ -1,9 +1,9 @@
-# playlist/urls.py
 from django.urls import path
-from .views import PlaylistListView, PlaylistDeleteView, SongPlayView
+from .views import PlaySongView, UserPlaylistView, DeleteFromPlaylistView
 
 urlpatterns = [
-    path('playlist/<str:user_id>/', PlaylistListView.as_view()),
-    path('playlist/<str:user_id>/del/<int:song_id>/', PlaylistDeleteView.as_view()),
-    path('playlist/play/<int:song_id>/', SongPlayView.as_view()),
+    path("play/<int:song_id>/", PlaySongView.as_view(), name="playlist-play"),
+    path("<str:user_id>/", UserPlaylistView.as_view(), name="playlist-user"),
+    path("<str:user_id>/del/<int:song_id>/", DeleteFromPlaylistView.as_view()),
 ]
+
