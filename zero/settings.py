@@ -146,6 +146,6 @@ CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
-    'http://프론트엔드주소',
-    'http://프론트엔드주소',
+    'http://localhost:5173',
+
 ]
