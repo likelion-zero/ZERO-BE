@@ -51,90 +51,6 @@ class MeaningView(APIView):
 
 
 
-class SunoCallbackView(APIView):
-    """
-    POST /api/create/callback/
-
-    Suno API가 곡 생성 완료 시 이 엔드포인트로 결과를 전송합니다.
-    task_id로 Song을 찾아서 SongDetail과 History를 저장합니다.
-    """
-
-    def post(self, request):
-        try:
-            data = request.data
-
-            # Suno API 콜백 데이터 구조에 따라 파싱
-            task_id = data.get("taskId")
-            status_str = data.get("status")
-
-            if not task_id:
-                return Response(
-                    {"error": "taskId가 필요합니다."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # task_id로 Song 찾기
-            try:
-                song = Song.objects.get(task_id=task_id)
-            except Song.DoesNotExist:
-                return Response(
-                    {"error": f"task_id '{task_id}'에 해당하는 곡을 찾을 수 없습니다."},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-
-            # 곡 생성이 성공한 경우에만 DB 저장
-            if status_str == "SUCCESS":
-                response_block = data.get("response") or {}
-                tracks = response_block.get("data") or []
-
-                if tracks:
-                    first_track = tracks[0]
-
-                    audio_url = first_track.get("audio_url", "")
-                    duration = first_track.get("duration", 0)
-                    lyrics = first_track.get("lyric", "") or first_track.get("lyrics", "") or ""
-
-                    # 이미 SongDetail이 있는지 확인 (중복 방지)
-                    existing_detail = SongDetail.objects.filter(song=song).first()
-
-                    if not existing_detail:
-                        # SongDetail 저장
-                        SongDetail.objects.create(
-                            song=song,
-                            song_url=audio_url,
-                            runtime=int(duration) if isinstance(duration, (int, float)) else 0,
-                            lyrics=lyrics,
-                        )
-
-                        # History 초기값 생성
-                        History.objects.get_or_create(song=song, defaults={"count": 0})
-
-                    return Response(
-                        {
-                            "success": True,
-                            "message": "곡 정보가 성공적으로 저장되었습니다.",
-                            "song_id": song.id
-                        },
-                        status=status.HTTP_200_OK
-                    )
-
-            # SUCCESS가 아닌 경우 (PENDING, FAILED 등)
-            return Response(
-                {
-                    "success": False,
-                    "message": f"곡 생성 상태: {status_str}",
-                    "task_id": task_id
-                },
-                status=status.HTTP_200_OK
-            )
-
-        except Exception as e:
-            return Response(
-                {"error": f"콜백 처리 중 오류 발생: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-
 class SunoGenerateView(APIView):
     """
     POST /api/create/{song_id}/
@@ -179,11 +95,46 @@ class SunoGenerateView(APIView):
         if isinstance(generate_result, dict):
             task_id = (generate_result.get("data") or {}).get("taskId")
 
-        # 4) task_id를 Song 모델에 저장
+        # 4) task_id 가 있으면 상태 조회 시도
+        final_result = generate_result
         if task_id:
-            song.task_id = task_id
-            song.save()
+            try:
+                status_result = request_suno_task_status(task_id)
+                # 상태 조회가 성공하면 그 결과를 최종 응답으로 사용
+                final_result = status_result
+            except Exception:
+                # 상태 조회 실패 시에는 처음 generate 결과만 반환
+                pass
 
-        # 5) 클라이언트로 Suno 응답 그대로 반환
-        # 실제 곡 생성은 비동기로 처리되며, 완료되면 콜백으로 DB에 저장됨
-        return Response(generate_result, status=status.HTTP_201_CREATED)
+        # 5) 상태 조회 결과를 기반으로 SongDetail + History 저장 시도
+        try:
+            data_block = final_result.get("data") or {}
+            status_str = data_block.get("status")
+            if status_str == "SUCCESS":
+                response_block = data_block.get("response") or {}
+                tracks = response_block.get("data") or []
+                if tracks:
+                    first_track = tracks[0]
+
+                    audio_url = first_track.get("audio_url", "")
+                    duration = first_track.get("duration", 0)
+                    # Suno 응답에 가사는 없을 수 있으므로 일단 빈 문자열
+                    lyrics = first_track.get("lyrics", "") or ""
+
+                    # SongDetail 저장
+                    SongDetail.objects.create(
+                        song=song,
+                        song_url=audio_url,
+                        runtime=int(duration) if isinstance(duration, (int, float)) else 0,
+                        lyrics=lyrics,
+                    )
+
+                    # History 초기값(없으면 생성, 있으면 그대로 사용)
+                    History.objects.get_or_create(song=song, defaults={"count": 0})
+        except Exception:
+            # DB 저장 과정에서 에러가 나더라도
+            # 클라이언트 응답까지 막지는 않음
+            pass
+
+        # 6) 클라이언트로 Suno 응답 그대로 반환
+        return Response(final_result, status=status.HTTP_201_CREATED)
