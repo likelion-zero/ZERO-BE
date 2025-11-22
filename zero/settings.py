@@ -27,7 +27,7 @@ DEBUG = env('DEBUG')
 
 GEMINI_KEY = env("GEMINI_KEY")
 SUNO_API_KEY = env("SUNO_API_KEY", default=None)
-# SUNO_CALLBACK_URL = "https://내도메인/api/suno/callback/"
+SUNO_CALLBACK_URL = "https://wordlykmu.shop/api/suno/callback/"
 
 ALLOWED_HOSTS = ['*']
 
@@ -143,8 +143,9 @@ CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
-
-    'http://localhost:5173'
+    'https://wordlykmu.vercel.app',  # 프론트 배포 주소
+    'http://localhost:5173',
+    'https://wordlykmu.shop',
 ]
 
 REST_FRAMEWORK = {
