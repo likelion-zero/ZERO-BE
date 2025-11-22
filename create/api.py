@@ -1,6 +1,5 @@
 # create/api.py
 
-
 import os
 from typing import Iterable, Dict, Any
 
@@ -11,11 +10,8 @@ from create.utils.gemini import get_meanings
 from .models import Song, Word
 
 
-
 def get_word_meanings(word: str):
     return get_meanings(word, top_k=3)
-
-
 
 
 # ============================
@@ -38,26 +34,18 @@ def _get_suno_api_key() -> str:
     return api_key
 
 
-
-
-# ★ 새로 추가: callback URL 가져오는 함수
 def _get_suno_callback_url() -> str:
     """
     Suno 콜백 URL 을 환경변수 또는 settings 에서 가져온다.
-    없으면 기본값을 사용한다.
     """
     callback_url = (
         os.environ.get("SUNO_CALLBACK_URL")
         or getattr(settings, "SUNO_CALLBACK_URL", None)
     )
     if not callback_url:
-        # 로컬 테스트용 기본값 (원하면 나중에 꼭 바꾸기)
+        # 로컬 테스트용 기본값 (운영에서는 반드시 settings 에서 지정)
         callback_url = "https://example.com/suno/callback"
     return callback_url
-
-
-
-
 
 
 def build_suno_prompt(song: Song, words: Iterable[Word]) -> str:
@@ -91,14 +79,14 @@ def request_suno_generate(
     """
     api_key = _get_suno_api_key()
     prompt = build_suno_prompt(song, words)
-    callback_url = _get_suno_callback_url() # 추가
+    callback_url = _get_suno_callback_url()
 
     payload: Dict[str, Any] = {
         "prompt": prompt,
         "customMode": False,
         "instrumental": False,
         "model": "V3_5",
-        "callBackUrl": callback_url,  # 기본 콜백 URL 세팅
+        "callBackUrl": callback_url,
     }
 
     if options:
@@ -130,21 +118,23 @@ def request_suno_generate(
     return resp.json()
 
 
-def request_suno_task_status(task_id: str) -> Dict[str, Any]:
-    """
-    Suno 'generate/record-info' 엔드포인트로 task 상태 조회.
-    """
-    api_key = _get_suno_api_key()
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-    }
 
-    resp = requests.get(
-        f"{SUNO_BASE_URL}/generate/record-info",
-        headers=headers,
-        params={"taskId": task_id},
-        timeout=30,
-    )
-    resp.raise_for_status()
-    return resp.json()
+# def request_suno_task_status(task_id: str) -> Dict[str, Any]:
+#     """
+#     Suno 'generate/record-info' 엔드포인트로 task 상태 조회.
+#     """
+#     api_key = _get_suno_api_key()
+#
+#     headers = {
+#         "Authorization": f"Bearer {api_key}",
+#     }
+#
+#     resp = requests.get(
+#         f"{SUNO_BASE_URL}/generate/record-info",
+#         headers=headers,
+#         params={"taskId": task_id},
+#         timeout=30,
+#     )
+#     resp.raise_for_status()
+#     return resp.json()
