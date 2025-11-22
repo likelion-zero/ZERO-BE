@@ -8,21 +8,18 @@ from .models import Song, SongDetail, History
 from create.api import (
     get_word_meanings,
     request_suno_generate,
-    request_suno_task_status,
 )
 
 
 class CreateSongView(APIView):
     def post(self, request):
-        # serializer = SongCreateSerializer(data=request.data)
         serializer = SongCreateSerializer(
             data=request.data,
             context={"request": request},
         )
 
-
         if not serializer.is_valid():
-            return Response(serializer.errors, status=400)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         song = serializer.save()
 
@@ -31,11 +28,12 @@ class CreateSongView(APIView):
                 "success": True,
                 "song_id": song.id,
                 "message": "곡 정보가 저장되었습니다. 이제 Suno AI 요청을 보내세요.",
-                "next_action": "CALL_SUNO"
+                "next_action": "CALL_SUNO",
             },
-            status=status.HTTP_201_CREATED
+            status=status.HTTP_201_CREATED,
         )
-        
+
+
 class MeaningView(APIView):
     def get(self, request, word):
         meanings = get_word_meanings(word)
@@ -48,22 +46,7 @@ class MeaningView(APIView):
         )
 
 
-
-
-
-
 class SunoGenerateView(APIView):
-    """
-    POST /api/create/<song_id>/
-
-    - song_id 기준으로 Song + Word 정보를 조회
-    - build_suno_prompt 로 프롬프트 생성 (request_suno_generate 내부)
-    - Suno /generate 호출 → taskId 획득
-    - taskId 로 /generate/record-info 를 여러 번 폴링해서 SUCCESS 나올 때까지 대기
-    - 최종 응답에서 sunoData 배열을 파싱해서
-        * DB(SongDetail, History)에 저장
-        * 프론트에는 정제된 JSON만 내려줌
-    """
 
     def post(self, request, song_id: int):
         # 1) Song 조회
@@ -75,7 +58,6 @@ class SunoGenerateView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # 2) Song 에 연결된 Word 들
         words_qs = song.words.all()
 
         # 3) 요청 바디에 옵션이 있으면 Suno 옵션으로 사용
@@ -93,109 +75,104 @@ class SunoGenerateView(APIView):
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
-        # generate_result 예시: {"code":200,"msg":"success","data":{"taskId":"..."}}
+        # 4) taskId 추출 후 Song 에 저장
         task_id = None
         if isinstance(generate_result, dict):
-            task_id = (generate_result.get("data") or {}).get("taskId")
+            data_block = generate_result.get("data") or {}
+            task_id = data_block.get("taskId")
+
+        if task_id:
+            song.suno_task_id = task_id  # Song 모델에 suno_task_id 필드가 있어야 함
+            song.save(update_fields=["suno_task_id"])
+
+        # 5) 클라이언트로 Suno 응답 그대로 반환
+        return Response(generate_result, status=status.HTTP_201_CREATED)
+
+
+class SunoCallbackView(APIView):
+    """
+    POST /api/create/callback/
+
+    Suno API 가 곡 생성 완료 시 이 엔드포인트로 결과를 전송한다.
+
+    예상 요청 예시:
+    {
+      "taskId": "bb3f83b9f9bcd49080f84609671c4c36",
+      "status": "SUCCESS",
+      "response": {
+        "data": [
+          {
+            "id": "audio_123",
+            "audio_url": "https://example.com/generated-music.mp3",
+            "title": "Generated Song",
+            "tags": "hiphop, chill",
+            "duration": 180.5,
+            "lyrics": "...."
+          }
+        ]
+      }
+    }
+    """
+
+    def post(self, request):
+        data = request.data
+
+        task_id = data.get("taskId")
+        status_str = data.get("status")
 
         if not task_id:
-            # taskId 자체를 못 받았으면 그대로 응답
-            return Response(generate_result, status=status.HTTP_502_BAD_GATEWAY)
+            return Response(
+                {"error": "taskId 가 없습니다."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # 5) taskId 로 /generate/record-info 폴링 (PENDING → SUCCESS 기다린다)
-        final_result = None
-        max_attempts = 5   # 최대 5번
-        delay_seconds = 3  # 3초 간격
+        # taskId 로 Song 찾기
+        try:
+            song = Song.objects.get(suno_task_id=task_id)
+        except Song.DoesNotExist:
+            return Response(
+                {"error": f"Unknown taskId: {task_id}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        for attempt in range(max_attempts):
+        # 성공인 경우에만 SongDetail / History 저장
+        if status_str == "SUCCESS":
             try:
-                status_result = request_suno_task_status(task_id)
-                final_result = status_result
+                response_block = data.get("response") or {}
+                tracks = response_block.get("data") or []
 
-                data_block = final_result.get("data") or {}
-                status_str = data_block.get("status")
+                if tracks:
+                    first_track = tracks[0]
 
-                # 성공하면 루프 종료
-                if status_str == "SUCCESS":
-                    break
+                    audio_url = (
+                        first_track.get("audio_url")
+                        or first_track.get("audioUrl")
+                        or ""
+                    )
+                    duration = first_track.get("duration") or 0
+                    lyrics = first_track.get("lyrics") or ""
 
-                # 에러 상태면 바로 종료하고 그 상태 그대로 돌려보냄
-                if status_str in ("FAILED", "ERROR", "SENSITIVE_WORD_ERROR"):
-                    break
+                    try:
+                        duration_int = int(duration)
+                    except (TypeError, ValueError):
+                        duration_int = 0
 
-            except Exception:
-                # 상태 조회에 실패하면 generate_result라도 돌려줄 수 있게 break
-                final_result = generate_result
-                break
+                    # SongDetail 기록 (필드명은 실제 모델에 맞게 조정)
+                    SongDetail.objects.create(
+                        song=song,
+                        song_url=audio_url,
+                        runtime=duration_int,
+                        lyrics=lyrics,
+                    )
 
-            time.sleep(delay_seconds)
+                    # History 초기값 생성 (없으면)
+                    History.objects.get_or_create(song=song, defaults={"count": 0})
 
-        if final_result is None:
-            final_result = generate_result
+            except Exception as e:
+                return Response(
+                    {"error": f"callback 처리 중 오류: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        # 6) 최종 응답에서 sunoData 파싱 + DB 저장 + 프론트용 형태로 가공
-        data_block = final_result.get("data") or {}
-        status_str = data_block.get("status")
-        task_id_final = data_block.get("taskId") or task_id
-        response_block = data_block.get("response") or {}
+        return Response({"success": True}, status=status.HTTP_200_OK)
 
-        # 실제 Suno 응답: response.sunoData 배열
-        tracks = response_block.get("sunoData") or []
-        # 혹시 다른 형태(response.data)일 수도 있으니 방어
-        if not tracks:
-            tracks = response_block.get("data") or []
-
-        # ----- DB 저장 (SUCCESS 이고 트랙이 있을 때만) -----
-        if status_str == "SUCCESS" and tracks:
-            first = tracks[0]
-
-            audio_url = (
-                first.get("audioUrl")
-                or first.get("audio_url")
-                or first.get("sourceAudioUrl")
-                or ""
-            )
-            duration = first.get("duration", 0)
-            lyrics = first.get("prompt", "") or first.get("lyrics", "") or ""
-
-            SongDetail.objects.create(
-                song=song,
-                song_url=audio_url,
-                runtime=int(duration) if isinstance(duration, (int, float)) else 0,
-                lyrics=lyrics,
-            )
-            History.objects.get_or_create(song=song, defaults={"count": 0})
-
-        # ----- 프론트로 내려줄 데이터만 추려서 만들기 -----
-        tracks_for_client = []
-        for t in tracks:
-            audio_url_for_client = (
-                t.get("audioUrl")
-                or t.get("audio_url")
-                or t.get("sourceAudioUrl")
-                or ""
-            )
-            tracks_for_client.append(
-                {
-                    "id": t.get("id"),
-                    "audio_url": audio_url_for_client,
-                    "title": t.get("title", ""),
-                    "tags": t.get("tags", ""),
-                    "duration": t.get("duration", 0),
-                }
-            )
-
-        # 최종적으로 프론트에 내려갈 JSON
-        response_body = {
-            "code": final_result.get("code", 200),
-            "msg": final_result.get("msg", "success"),
-            "data": {
-                "taskId": task_id_final,
-                "status": status_str,
-                "response": {
-                    "data": tracks_for_client,
-                },
-            },
-        }
-
-        return Response(response_body, status=status.HTTP_201_CREATED)

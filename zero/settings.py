@@ -27,7 +27,11 @@ DEBUG = env('DEBUG')
 
 GEMINI_KEY = env("GEMINI_KEY")
 SUNO_API_KEY = env("SUNO_API_KEY", default=None)
-SUNO_CALLBACK_URL = "https://wordlykmu.shop/api/suno/callback/"
+# Suno 콜백 URL: .env 에서 덮어쓸 수 있고, 기본값은 /api/create/callback/
+SUNO_CALLBACK_URL = env(
+    "SUNO_CALLBACK_URL",
+    default="https://wordlykmu.shop/api/create/callback/",
+)
 
 ALLOWED_HOSTS = ['*']
 

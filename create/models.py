@@ -13,6 +13,14 @@ class Song(models.Model):
     genre = models.CharField(max_length=30)
     mood = models.CharField(max_length=30)
 
+    suno_task_id = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        unique=True,
+        help_text="Suno 곡 생성 taskId"
+    )
+
     def __str__(self):
         return self.title
 
