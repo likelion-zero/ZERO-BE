@@ -15,10 +15,16 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.http import HttpResponse
 from django.urls import path,include
 
+
+def index(request):
+    # 백엔드 도메인으로 직접 접속했을 때 보이는 간단한 안내
+    return HttpResponse("WordlyKMU 백엔드 API 서버입니다. /api/... 경로로 요청해 주세요.")
+
 urlpatterns = [
-    path('', include("create.urls")),
+    path('', index),
     path('admin/', admin.site.urls),
     path("api/create/", include("create.urls")),
     path("api/playlist/", include("playlist.urls")),
