@@ -10,7 +10,7 @@ class SongCreateSerializer(serializers.Serializer):
     language = serializers.CharField()
     genre = serializers.CharField()
     mood = serializers.CharField()
-    created_by = serializers.CharField()
+    # created_by = serializers.CharField()
     words = serializers.ListField(child=serializers.CharField())
     meaning = serializers.ListField(child=serializers.CharField())
 
@@ -20,11 +20,20 @@ class SongCreateSerializer(serializers.Serializer):
         return attrs
 
     def create(self, validated_data):
-        username = validated_data.pop("created_by")
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+
+        # 로그인/회원 시스템이 없으므로, 실제 User 인스턴스가 아니면 None으로 처리
+        if not isinstance(user, User) or not getattr(user, "is_authenticated", False):
+            user = None
+
+        # validated_data.pop("created_by", None)
+
+        # username = validated_data.pop("created_by")
         words = validated_data.pop("words")
         meanings = validated_data.pop("meaning")
 
-        user = User.objects.get(username=username)
+        # user = User.objects.get(username=username)
 
         # Song 생성 (User 없음)
         song = Song.objects.create(**validated_data)
