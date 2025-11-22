@@ -27,7 +27,7 @@ DEBUG = env('DEBUG')
 
 GEMINI_KEY = env("GEMINI_KEY")
 SUNO_API_KEY = env("SUNO_API_KEY", default=None)
-SUNO_CALLBACK_URL = "https://wordlykmu.shop/api/suno/callback/"
+SUNO_CALLBACK_URL = "https://wordlykmu.shop/api/create/callback/"
 
 ALLOWED_HOSTS = ['*']
 
