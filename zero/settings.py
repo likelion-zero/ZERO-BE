@@ -11,28 +11,23 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 from logging import DEBUG
 from pathlib import Path
-
+from dotenv import load_dotenv
 import os
 import environ
 
+load_dotenv()
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 env = environ.Env(DEBUG=(bool, True))
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
-
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = env('SECRET_KEY')
-
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env('DEBUG')
+
+GEMINI_KEY = env("GEMINI_KEY")
+SUNO_API_KEY = env("SUNO_API_KEY", default=None)
+SUNO_CALLBACK_URL = "https://wordlykmu.shop/api/suno/callback/"
 
 ALLOWED_HOSTS = ['*']
 
@@ -46,8 +41,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
 
     'corsheaders',
+    
+    'create',
+    'playlist',
+    'chart'
 ]
 
 MIDDLEWARE = [
@@ -143,6 +143,13 @@ CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
-    'http://프론트엔드주소',
-    'http://프론트엔드주소',
+    'https://wordlykmu.vercel.app',  # 프론트 배포 주소
+    'http://localhost:5173',
+    'https://wordlykmu.shop',
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'create.auth.AlwaysSuperUser',
+    ]
+}
